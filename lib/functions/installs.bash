@@ -79,9 +79,6 @@ install_local_tool_versions() {
   local search_path
   search_path=$PWD
 
-  local some_tools_installed
-  local some_plugin_not_installed
-
   local tool_versions_path
   tool_versions_path=$(find_tool_versions)
 
@@ -96,49 +93,31 @@ install_local_tool_versions() {
     plugins_installed=$(printf "%s" "$plugins_installed" | tr " " "\n")
   fi
 
-  if [ -z "$plugins_installed" ]; then
-    printf "Install plugins first to be able to install tools\n"
-    exit 1
-  fi
-
   # Locate all the plugins defined in the versions file.
   local tools_file
   if [ -f "$tool_versions_path" ]; then
     tools_file=$(strip_tool_version_comments "$tool_versions_path" | cut -d ' ' -f 1)
     for plugin_name in $tools_file; do
       if ! printf '%s\n' "${plugins_installed[@]}" | grep -q "^$plugin_name\$"; then
-        printf "%s plugin is not installed\n" "$plugin_name"
-        some_plugin_not_installed='yes'
+        plugin_add_command "$plugin_name"
+        plugins_installed="$plugins_installed $plugin_name"
       fi
     done
   fi
 
-  if [ -n "$some_plugin_not_installed" ]; then
-    exit 1
-  fi
+  for plugin_name in $plugins_installed; do
+    local plugin_version_and_path
+    plugin_version_and_path="$(find_versions "$plugin_name" "$search_path")"
 
-  if [ -n "$plugins_installed" ]; then
-    for plugin_name in $plugins_installed; do
-      local plugin_version_and_path
-      plugin_version_and_path="$(find_versions "$plugin_name" "$search_path")"
-
-      if [ -n "$plugin_version_and_path" ]; then
-        local plugin_version
-        some_tools_installed='yes'
-        plugin_versions=$(cut -d '|' -f 1 <<<"$plugin_version_and_path")
-        for plugin_version in $plugin_versions; do
-          install_tool_version "$plugin_name" "$plugin_version"
-        done
-      fi
-    done
-  fi
-
-  if [ -z "$some_tools_installed" ]; then
-    printf "Either specify a tool & version in the command\n"
-    printf "OR add .tool-versions file in this directory\n"
-    printf "or in a parent directory\n"
-    exit 1
-  fi
+    if [ -n "$plugin_version_and_path" ]; then
+      local plugin_version
+      plugin_versions=$(cut -d '|' -f 1 <<<"$plugin_version_and_path")
+      for plugin_version in $plugin_versions; do
+        install_tool_version "$plugin_name" "$plugin_version"
+        plugins_installed="$plugins_installed $plugin_name"
+      done
+    fi
+  done
 }
 
 install_tool_version() {
